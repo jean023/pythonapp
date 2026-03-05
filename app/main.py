@@ -1,25 +1,31 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
-from .database import engine, SessionLocal
-from .models import Base, User
-
-Base.metadata.create_all(bind=engine)
+from app.database import SessionLocal, engine
+from app import models, schemas
 
 app = FastAPI()
 
-@app.post("/users")
-def create_user(name: str, email: str):
-    db: Session = SessionLocal()
-    user = User(name=name, email=email)
-    db.add(user)
+models.Base.metadata.create_all(bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@app.post("/users", response_model=schemas.UserResponse)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = models.User(name=user.name, email=user.email)
+
+    db.add(db_user)
     db.commit()
-    db.refresh(user)
-    db.close()
-    return user
+    db.refresh(db_user)
+
+    return db_user
+
 
 @app.get("/users")
-def get_users():
-    db: Session = SessionLocal()
-    users = db.query(User).all()
-    db.close()
-    return users
+def get_users(db: Session = Depends(get_db)):
+    return db.query(models.User).all()
